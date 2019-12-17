@@ -29,7 +29,7 @@ import (
 	"strings"
 
 	"github.com/ezbastion/ezb_srv/cache"
-	"github.com/ezbastion/ezb_srv/model"
+	"github.com/ezbastion/ezb_srv/models"
 
 	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
@@ -52,26 +52,27 @@ type Introspec struct {
 	UserGroups []string `json:"userGroups"`
 }
 
-func AuthJWT(storage cache.Storage, conf *model.Configuration, exPath string) gin.HandlerFunc {
+func AuthJWT(storage cache.Storage, conf *models.Configuration, exPath string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// tr, _ := c.MustGet("trace").(model.EzbLogs)
-		trace := c.MustGet("trace").(model.EzbLogs)
+		// tr, _ := c.MustGet("trace").(models.EzbLogs)
+		trace := c.MustGet("trace").(models.EzbLogs)
 		var err error
 		logg := log.WithFields(log.Fields{
 			"middleware": "jwt",
 			"xtrack":     trace.Xtrack,
 		})
+		logg.Debug("start")
 		authHead := c.GetHeader("Authorization")
 		tokenid := c.GetHeader("x-ezb-tokenid")
-
-		bearer := strings.Split(authHead, " ")
-		if len(bearer) != 2 {
-			var Account model.EzbAccounts
+		logg.Debug("Authorization:", authHead)
+		if authHead == "" {
+			var Account models.EzbAccounts
 			Account.Name = "anonymous"
 			c.Set("account", Account)
+			c.Set("tokenid", "anonymous")
 			tr, ok := c.Get("trace")
 			if ok {
-				trace := tr.(model.EzbLogs)
+				trace := tr.(models.EzbLogs)
 				trace.Token = "anonymous"
 				trace.Account = "none"
 				trace.Issuer = "NA"
@@ -80,6 +81,7 @@ func AuthJWT(storage cache.Storage, conf *model.Configuration, exPath string) gi
 			c.Next()
 			return
 		}
+		bearer := strings.Split(authHead, " ")
 		if strings.Compare(strings.ToLower(bearer[0]), "bearer") != 0 {
 			logg.Error("NOT AUTHORIZATION TYPE BEARER")
 			c.AbortWithError(http.StatusForbidden, errors.New("#J0002"))
@@ -119,7 +121,7 @@ func AuthJWT(storage cache.Storage, conf *model.Configuration, exPath string) gi
 		c.Next()
 	}
 }
-func Introspection(c *gin.Context, sub string, Account model.EzbAccounts) (err error) {
+func Introspection(c *gin.Context, sub string, Account models.EzbAccounts) (err error) {
 	var Url *url.URL
 	Url, _ = url.Parse(Account.STA.EndPoint)
 	Url.Path = "/access"
@@ -142,8 +144,8 @@ func Introspection(c *gin.Context, sub string, Account model.EzbAccounts) (err e
 	}
 	return errors.New("WRONG GROUP")
 }
-func getAccount(c *gin.Context, sub string, storage cache.Storage, conf *model.Configuration) (Account model.EzbAccounts, err error) {
-	Account, err = model.GetAccount(storage, conf, sub)
+func getAccount(c *gin.Context, sub string, storage cache.Storage, conf *models.Configuration) (Account models.EzbAccounts, err error) {
+	Account, err = models.GetAccount(storage, conf, sub)
 	if err != nil {
 		c.AbortWithError(http.StatusForbidden, errors.New("#J0006"))
 		return Account, err
@@ -161,7 +163,7 @@ func getAccount(c *gin.Context, sub string, storage cache.Storage, conf *model.C
 }
 
 func parseJWT(c *gin.Context, tokenString string, exPath string) (claims jwt.MapClaims, err error) {
-	trace := c.MustGet("trace").(model.EzbLogs)
+	trace := c.MustGet("trace").(models.EzbLogs)
 	logg := log.WithFields(log.Fields{
 		"middleware": "jwt",
 		"xtrack":     trace.Xtrack,

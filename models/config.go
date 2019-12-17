@@ -13,20 +13,20 @@
 //     You should have received a copy of the GNU Affero General Public License
 //     along with ezBastion.  If not, see <https://www.gnu.org/licenses/>.
 
-package model
+package models
+
+import "github.com/ezbastion/ezb_lib/confmanager"
 
 type Configuration struct {
-	// Log             bool     `json:"log"`
-	// JwtPubKey       string   `json:"jwtpubkey"`
-	Listen          string   `json:"listen"`
-	EzbDB           string   `json:"ezb_db"`
-	LogLevel        string   `json:"loglevel"`
-	CacheL1         int      `json:"cacheL1"`
-	PrivateKey      string   `json:"privatekey"`
-	PublicCert      string   `json:"publiccert"`
-	CaCert          string   `json:"cacert"`
-	ServiceName     string   `json:"servicename"`
-	ServiceFullName string   `json:"servicefullname"`
-	EzbPki          string   `json:"ezb_pki"`
-	SAN             []string `json:"san"`
+	Listen          string             `json:"listen"`
+	EzbDB           string             `json:"ezb_db"`
+	Logger          confmanager.Logger `json:"logger"`
+	CacheL1         int                `json:"cacheL1"`
+	PrivateKey      string             `json:"privatekey"`
+	PublicCert      string             `json:"publiccert"`
+	CaCert          string             `json:"cacert"`
+	ServiceName     string             `json:"servicename"`
+	ServiceFullName string             `json:"servicefullname"`
+	EzbPki          string             `json:"ezb_pki"`
+	SAN             []string           `json:"san"`
 }

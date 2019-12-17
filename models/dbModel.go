@@ -13,7 +13,7 @@
 //     You should have received a copy of the GNU Affero General Public License
 //     along with ezBastion.  If not, see <https://www.gnu.org/licenses/>.
 
-package model
+package models
 
 import (
 	"time"
@@ -25,6 +25,7 @@ type User struct {
 	UserGroups []string `json:"userGroups"`
 	Signkey    string   `json:"sign_key"`
 }
+
 type EzbAccounts struct {
 	ID          int       `json:"id"`
 	Name        string    `json:"name"`
@@ -64,6 +65,8 @@ type EzbActions struct {
 	Deprecated  int            `json:"deprecated"`
 	Anonymous   bool           `json:"anonymous"`
 	Controllers EzbControllers `json:"controllers"`
+	Polling     bool           `gorm:"not null;default:'0'" json:"polling"`
+
 	// EzbAccessID      int              `gorm:"default:'0'" json:"ezbaccessid" sql:"type:int REFERENCES ezb_access(id)"`
 	// Access           EzbAccess        `json:"access" gorm:"ForeignKey:ID;AssociationForeignKey:EzbAccessID;association_autoupdate:false;association_autocreate:false;association_save_reference:false;"`
 	// EzbJobsID        int              ` json:"ezbjobsid" sql:"type:int REFERENCES ezb_jobs(id)"`
@@ -72,6 +75,35 @@ type EzbActions struct {
 	// Groups           []EzbGroups      `json:"groups" gorm:"many2many:ezb_groups_has_ezb_actions;"`
 	// EzbControllersID int              `gorm:"default:'0'" json:"ezbcontrollersid" sql:"type:int REFERENCES ezb_controllers(id)"`
 }
+
+type EzbTasks struct {
+	UUID       string    `json:"uuid"`
+	CreateDate time.Time `json:"createddate"`
+	UpdateDate time.Time `json:"updatedate"`
+	Status     string    `json:"status"`
+	// TokenID    string    `json:"tokenid"`
+	// PID        int       `json:"pid"`
+	// Parameters string    `json:"parameters"`
+	StatusURL string `json:"statusurl"`
+	LogURL    string `json:"logurl"`
+	ResultURL string `json:"resulturl"`
+}
+
+type taksStatus int
+
+const (
+	// PENDING: the job is created but not started
+	PENDING taksStatus = iota
+	RUNNING
+	FAILED
+	FINISH
+)
+
+func TaksStatus(i int) string {
+	p := [4]string{"PENDING", "RUNNING", "FAILED", "FINISH"}
+	return p[i]
+}
+
 type EzbWorkers struct {
 	ID          int       `json:"id"`
 	Name        string    `json:"name"`
@@ -92,7 +124,6 @@ type EzbJobs struct {
 	Checksum string `json:"checksum"`
 	Path     string `json:"path"`
 	Cache    int    `json:"cache"`
-	Async    bool   `json:"async"`
 	Output   string `json:"output"`
 }
 type EzbTags struct {

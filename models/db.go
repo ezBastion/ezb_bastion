@@ -13,7 +13,7 @@
 //     You should have received a copy of the GNU Affero General Public License
 //     along with ezBastion.  If not, see <https://www.gnu.org/licenses/>.
 
-package model
+package models
 
 import (
 	"bytes"
@@ -42,6 +42,7 @@ func init() {
 	// exPath = "./"
 
 }
+
 func GetViewApi(s cache.Storage, c *Configuration, token, xtrack string) ([]ViewApi, error) {
 	storage = s
 	var vapis []ViewApi

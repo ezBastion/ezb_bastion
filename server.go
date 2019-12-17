@@ -17,23 +17,23 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"io"
 	"os/signal"
 	"strings"
 	"time"
 
+	"github.com/ezbastion/ezb_db/Middleware"
+	"github.com/ezbastion/ezb_lib/logmanager"
 	"github.com/ezbastion/ezb_srv/cache"
 	"github.com/ezbastion/ezb_srv/cache/memory"
 	"github.com/ezbastion/ezb_srv/ctrl"
 	"github.com/ezbastion/ezb_srv/middleware"
+	"github.com/ezbastion/ezb_srv/models"
 	"github.com/ezbastion/ezb_srv/setup"
-	"github.com/ezbastion/ezb_db/Middleware"
+	"github.com/gin-contrib/location"
 
 	"net/http"
 	"os"
 	"path"
-	"path/filepath"
 
 	"github.com/gin-gonic/contrib/ginrus"
 	"github.com/gin-gonic/gin"
@@ -41,18 +41,14 @@ import (
 )
 
 var storage cache.Storage
-var exPath string
 
 func mainGin(serverchan *chan bool) {
 
-	ex, _ := os.Executable()
-	exPath = filepath.Dir(ex)
-
-	conf, err := setup.CheckConfig(true)
-
+	conf, err := setup.CheckConfig()
 	if err != nil {
 		panic(err)
 	}
+	logmanager.SetLogLevel(conf.Logger.LogLevel, exPath, path.Join(exPath, "log/ezb_srv.log"), conf.Logger.MaxSize, conf.Logger.MaxBackups, conf.Logger.MaxAge)
 
 	storage = memory.NewStorage()
 
@@ -61,59 +57,14 @@ func mainGin(serverchan *chan bool) {
 
 	}
 
-	/* log */
-	outlog := true
-	gin.DisableConsoleColor()
-	log.SetFormatter(&log.JSONFormatter{})
-	switch conf.LogLevel {
-	case "debug":
-		log.SetLevel(log.DebugLevel)
-		break
-	case "info":
-		log.SetLevel(log.InfoLevel)
-		break
-	case "warning":
-		log.SetLevel(log.WarnLevel)
-		break
-	case "error":
-		log.SetLevel(log.ErrorLevel)
-		break
-	case "critical":
-		log.SetLevel(log.FatalLevel)
-		break
-	default:
-		outlog = false
-	}
-	if outlog {
-		if _, err := os.Stat(path.Join(exPath, "log")); os.IsNotExist(err) {
-			err = os.MkdirAll(path.Join(exPath, "log"), 0600)
-			if err != nil {
-				log.Println(err)
-			}
-		}
-		t := time.Now().UTC()
-		l := fmt.Sprintf("log/ezb_srv-%d%d.log", t.Year(), t.YearDay())
-		f, _ := os.OpenFile(path.Join(exPath, l), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		defer f.Close()
-		log.SetOutput(io.MultiWriter(f))
-		ti := time.NewTicker(1 * time.Minute)
-		defer ti.Stop()
-		go func() {
-			for range ti.C {
-				t := time.Now().UTC()
-				l := fmt.Sprintf("log/ezb_srv-%d%d.log", t.Year(), t.YearDay())
-				f, _ := os.OpenFile(path.Join(exPath, l), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-				defer f.Close()
-				log.SetOutput(io.MultiWriter(f))
-			}
-		}()
-	}
-	/* log */
 	/* gin */
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
 	r.Use(ginrus.Ginrus(log.StandardLogger(), time.RFC3339, true))
 	r.Use(Middleware.AddHeaders)
+	r.OPTIONS("*a", func(c *gin.Context) {
+		c.AbortWithStatus(200)
+	})
 	r.Use(middleware.LoadConfig(&conf, exPath))
 	r.Use(middleware.StartTrace)
 	r.Use(middleware.InternalWork(storage, &conf))
@@ -122,9 +73,7 @@ func mainGin(serverchan *chan bool) {
 	r.Use(middleware.RouteParser)
 	r.Use(middleware.GetParams(storage, &conf))
 	r.Use(middleware.SelectWorker)
-	r.OPTIONS("*a", func(c *gin.Context) {
-		c.AbortWithStatus(200)
-	})
+	r.Use(location.Default())
 	r.GET("*a", sendAction)
 	r.POST("*a", sendAction)
 	r.PUT("*a", sendAction)
@@ -139,7 +88,7 @@ func mainGin(serverchan *chan bool) {
 
 	go func() {
 		if err := srv.ListenAndServe(); err != nil {
-			log.Info("listen: %s\n", err)
+			log.Debug("listen: %s\n", err)
 		}
 	}()
 	/* gin */
@@ -147,14 +96,14 @@ func mainGin(serverchan *chan bool) {
 	quit := make(chan os.Signal)
 	signal.Notify(quit, os.Interrupt)
 	<-quit
-	log.Info("Shutdown Server ...")
+	log.Debug("Shutdown Server ...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Fatal("Server Shutdown:", err)
 	}
-	log.Info("Server exiting")
+	log.Debug("Server exiting")
 }
 
 func sendAction(c *gin.Context) {
@@ -162,13 +111,21 @@ func sendAction(c *gin.Context) {
 	escapedPath := c.Request.URL.EscapedPath()
 	path := strings.Split(escapedPath, "/")
 	routeType := c.MustGet("routeType").(string)
+	log.Debug("sendAction routeType: ", routeType)
 	switch routeType {
 	case "worker":
 		ctrl.SendAction(c, storage)
 		break
 	case "internal":
+		account := c.MustGet("account").(models.EzbAccounts)
+		if account.Name == "anonymous" {
+			c.JSON(401, "MUST LOGIN")
+			return
+		}
+
 		action := path[3]
 		cmd := path[4]
+		log.Debug("sendAction internal  action:", action, " cmd:", cmd)
 		switch action {
 		case "log":
 			switch cmd {
@@ -198,6 +155,8 @@ func sendAction(c *gin.Context) {
 			break
 		}
 		break
-
+	case "tasks":
+		ctrl.GetTask(c)
+		break
 	}
 }

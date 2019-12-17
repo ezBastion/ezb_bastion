@@ -17,11 +17,12 @@ package middleware
 
 import (
 	"errors"
-	"github.com/ezbastion/ezb_srv/cache"
-	"github.com/ezbastion/ezb_srv/model"
 	"net/http"
 	"net/url"
 	s "strings"
+
+	"github.com/ezbastion/ezb_srv/cache"
+	"github.com/ezbastion/ezb_srv/models"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-resty/resty"
@@ -34,45 +35,73 @@ type formAuth struct {
 	Password  string `json:"password" form:"password"`
 }
 
-func InternalWork(storage cache.Storage, conf *model.Configuration) gin.HandlerFunc {
+func InternalWork(storage cache.Storage, conf *models.Configuration) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tr, _ := c.Get("trace")
-		trace := tr.(model.EzbLogs)
+		trace := tr.(models.EzbLogs)
 		logg := log.WithFields(log.Fields{
 			"middleware": "InternalWork",
 			"xtrack":     trace.Xtrack,
 		})
-
+		logg.Debug("start")
 		escapedPath := c.Request.URL.EscapedPath()
 		path := s.Split(escapedPath, "/")
 		// sver := path[1]
 		if len(path) == 2 && path[1] == "authorize" {
+			logg.Debug("routeType: authorize")
 			c.Set("routeType", "authorize")
 			ret, err := authorize(c, storage, conf)
 			if err != nil {
 				logg.Error(err)
 				c.AbortWithError(http.StatusInternalServerError, errors.New("#I0001"))
+				return
 			} else {
 				trace.Controller = "internal"
 				trace.Action = "authorize"
 				logg.Info(ret)
 			}
-		} else if path[1] == "wks" {
+		}
+		switch path[1] {
+		case "wks":
+			logg.Debug("routeType: internal")
 			c.Set("routeType", "internal")
 			// trace.Action = "wks"
 			wksid := path[2]
 			c.Set("wksid", wksid)
-		} else {
+			break
+		case "tasks":
+			if len(path) == 4 {
+				logg.Debug("routeType: tasks")
+				c.Set("routeType", "tasks")
+				c.Set("tasksid", path[2])
+				c.Set("tasksaction", path[3])
+			} else {
+				logg.Error("bad task path url")
+				c.AbortWithError(http.StatusBadRequest, errors.New("#I0002"))
+			}
+			break
+		default:
+			logg.Debug("routeType: worker")
 			c.Set("routeType", "worker")
 		}
+		// if path[1] == "wks" {
+		// 	logg.Debug("routeType: internal")
+		// 	c.Set("routeType", "internal")
+		// 	// trace.Action = "wks"
+		// 	wksid := path[2]
+		// 	c.Set("wksid", wksid)
+		// } else {
+		// 	logg.Debug("routeType: worker")
+		// 	c.Set("routeType", "worker")
+		// }
 		c.Set("trace", trace)
 		c.Next()
 	}
 }
 
-func authorize(c *gin.Context, storage cache.Storage, conf *model.Configuration) (string, error) {
+func authorize(c *gin.Context, storage cache.Storage, conf *models.Configuration) (string, error) {
 	var EndPoint string
-	trace := c.MustGet("trace").(model.EzbLogs)
+	trace := c.MustGet("trace").(models.EzbLogs)
 	logg := log.WithFields(log.Fields{
 		"middleware": "authorize",
 		"xtrack":     trace.Xtrack,
@@ -84,7 +113,7 @@ func authorize(c *gin.Context, storage cache.Storage, conf *model.Configuration)
 		if tokenid != "" {
 			Username = tokenid
 		}
-		account, err := model.GetAccount(storage, conf, Username)
+		account, err := models.GetAccount(storage, conf, Username)
 		if err != nil {
 
 			logg.Error(err)
@@ -121,7 +150,7 @@ func authorize(c *gin.Context, storage cache.Storage, conf *model.Configuration)
 			return "redirect with formauth to " + EndPoint, nil
 		}
 	} else {
-		stas, err := model.GetStas(storage, conf)
+		stas, err := models.GetStas(storage, conf)
 		if err != nil {
 			logg.Error(err)
 			return "", err

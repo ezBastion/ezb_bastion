@@ -24,20 +24,22 @@ import (
 	s "strings"
 
 	"github.com/ezbastion/ezb_srv/cache"
-	"github.com/ezbastion/ezb_srv/model"
+	"github.com/ezbastion/ezb_srv/models"
 
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 )
 
-func GetParams(storage cache.Storage, conf *model.Configuration) gin.HandlerFunc {
+func GetParams(storage cache.Storage, conf *models.Configuration) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tr, _ := c.Get("trace")
-		trace := tr.(model.EzbLogs)
+		trace := tr.(models.EzbLogs)
 		logg := log.WithFields(log.Fields{
 			"middleware": "GetParams",
 			"xtrack":     trace.Xtrack,
 		})
+		logg.Debug("start")
+
 		rt, _ := c.Get("routeType")
 		routeType := rt.(string)
 		if routeType == "worker" {
@@ -49,10 +51,11 @@ func GetParams(storage cache.Storage, conf *model.Configuration) gin.HandlerFunc
 				actionID = k
 				actionRGX = v
 			}
-			action, err := model.GetAction(storage, conf, actionID)
+			action, err := models.GetAction(storage, conf, actionID)
 			if err != nil {
 				logg.Error(err)
 				c.AbortWithError(http.StatusInternalServerError, errors.New("#V0001"))
+				return
 			}
 			params := make(map[string]string)
 			escapedPath := c.Request.URL.EscapedPath()
@@ -67,10 +70,16 @@ func GetParams(storage cache.Storage, conf *model.Configuration) gin.HandlerFunc
 			/* tags */
 			params["methode"] = s.ToLower(c.Request.Method)
 			usr, _ := c.Get("account")
-			account := usr.(model.EzbAccounts)
+			account := usr.(models.EzbAccounts)
 			params["tokenid"] = account.Name
 			params["version"] = fmt.Sprintf("%d", action.Controllers.Version)
 			params["constant"] = action.Constant
+			// params["polling"] = strconv.FormatBool(action.Polling)
+			if action.Polling == true && c.Request.Method != "POST" {
+				logg.Error("Polling must use POST methode.")
+				c.AbortWithError(http.StatusBadRequest, errors.New("#V0002"))
+				return
+			}
 			/* query string */
 			query := make(map[string]string)
 			reQ := regexp.MustCompile(`([a-z0-9A-Z-]+)=([si]{1})`)
@@ -125,8 +134,7 @@ func GetParams(storage cache.Storage, conf *model.Configuration) gin.HandlerFunc
 			}
 			/* body */
 			/* job */
-			jsJob, _ := json.Marshal(action.Jobs)
-			params["job"] = string(jsJob)
+			c.Set("job", action.Jobs)
 			/* job */
 			c.Set("params", params)
 			// fmt.Println(params)

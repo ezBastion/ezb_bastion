@@ -13,11 +13,20 @@
 //     You should have received a copy of the GNU Affero General Public License
 //     along with ezBastion.  If not, see <https://www.gnu.org/licenses/>.
 
-package model
+package models
 
 type RestQuery struct {
 	Controller string
 	Action     string
 	Site       string
 	Query      map[string][]string
+}
+
+type EzbParams struct {
+	Data map[string]string `json:"data"`
+	Meta EzbParamMeta      `json:"meta"`
+}
+
+type EzbParamMeta struct {
+	Job EzbJobs `json:"job"`
 }
